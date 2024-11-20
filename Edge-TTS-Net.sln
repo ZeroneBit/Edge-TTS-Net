@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35327.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "edge-tts-net", "edge-tts-net\edge-tts-net.csproj", "{BC1C8F60-455F-42D8-ABB8-441EE092D850}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "edge-tts-net-Test", "edge-tts-net-TEST\edge-tts-net-Test.csproj", "{2B90A247-2832-400B-BA9D-BAF12AF08581}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "edge-tts-net-Examples", "edge-tts-net-Examples\edge-tts-net-Examples.csproj", "{7ADCA63F-C234-4FF6-9940-433179A2441A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BC1C8F60-455F-42D8-ABB8-441EE092D850}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC1C8F60-455F-42D8-ABB8-441EE092D850}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC1C8F60-455F-42D8-ABB8-441EE092D850}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC1C8F60-455F-42D8-ABB8-441EE092D850}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B90A247-2832-400B-BA9D-BAF12AF08581}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B90A247-2832-400B-BA9D-BAF12AF08581}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B90A247-2832-400B-BA9D-BAF12AF08581}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B90A247-2832-400B-BA9D-BAF12AF08581}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7ADCA63F-C234-4FF6-9940-433179A2441A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7ADCA63F-C234-4FF6-9940-433179A2441A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7ADCA63F-C234-4FF6-9940-433179A2441A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7ADCA63F-C234-4FF6-9940-433179A2441A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FECF3430-BF64-4F10-B7C2-3D0D85ACA4CB}
+	EndGlobalSection
+EndGlobal
