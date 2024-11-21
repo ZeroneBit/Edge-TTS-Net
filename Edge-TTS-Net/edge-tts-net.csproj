@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>edge_tts_net</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Internal\Voices.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Internal\Voices.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

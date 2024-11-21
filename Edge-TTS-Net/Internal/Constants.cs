@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace edge_tts_net
+namespace edge_tts_net.Internal
 {
     /// <summary>
     /// Constants for the Edge TTS project.

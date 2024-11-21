@@ -4,13 +4,13 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace edge_tts_net
+namespace edge_tts_net.Internal
 {
     internal class DRM
     {
         public static string Generate_Sec_ms_gec()
         {
-            var ticks = DRM.GetUnixTimestamp();
+            var ticks = GetUnixTimestamp();
             ticks += WIN_EPOCH;
             ticks -= ticks % 300;
             ticks *= S_TO_NS / 100;
@@ -42,7 +42,7 @@ namespace edge_tts_net
             var serverDate = ParseRfc2616Date(date);
             var clientDate = GetUnixTimestamp();
 
-            DRM.clock_skew_seconds += (serverDate - clientDate);
+            clock_skew_seconds += serverDate - clientDate;
         }
 
         public static double ParseRfc2616Date(string date)
@@ -57,7 +57,7 @@ namespace edge_tts_net
 
             double unixTimestamp = new DateTimeOffset(utcNow).ToUnixTimeSeconds();
 
-            return unixTimestamp + DRM.clock_skew_seconds;
+            return unixTimestamp + clock_skew_seconds;
         }
 
         private static double clock_skew_seconds = 0;

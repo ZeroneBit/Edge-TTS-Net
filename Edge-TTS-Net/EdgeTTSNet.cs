@@ -1,12 +1,12 @@
-﻿using System;
+﻿using edge_tts_net.Internal;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Net.WebSockets;
-using System.Runtime.Serialization.Json;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -14,197 +14,113 @@ using System.Threading.Tasks;
 
 namespace edge_tts_net
 {
-    public class EdgeTTSNet : IDisposable
+    public class EdgeTTSNet
     {
-        public Action<TTSMetadata> OnMetadata;
-        public Action<TTSStream> OnStream;
-
-        private ClientWebSocket _clientWebSocket;
+        private TTSOption _option;
         private string _webProxy;
 
-        public EdgeTTSNet(string webProxy = null)
+        public EdgeTTSNet(TTSOption option = default, string webProxy = null)
         {
             _webProxy = webProxy;
+            _option = option;
+            if (_option == default)
+                _option = TTSOption.Default;
         }
 
-        public void Dispose()
+        public async Task<List<TTSVoice>> GetVoices()
         {
-            _clientWebSocket?.Dispose();
-        }
-
-        public async Task<TTSResult> TTS(string text, CancellationToken cancellationToken = default, TTSOption option = default)
-        {
-            if (option == default) 
-                option = TTSOption.Default;
-
-            var finalUtterance = new Dictionary<int, int>();
-            var prevIdx = -1;
-            var shiftTime = -1;
-            var idx = 0;
-
-            var metaResult = new List<TTSMetadata>();
-            var streamResult = new MemoryStream();
-
-            await EnsureConnection(cancellationToken);
-            var texts = SplitTextByByteLength(Escape(RemoveIncompatibleCharacters(text)), CalcMaxMsgSize(option));
-
-            foreach (var partial in texts)
+            var assembly = Assembly.GetExecutingAssembly();
+            var jsonName = assembly.GetManifestResourceNames().FirstOrDefault(n => n.Contains("Voices.json"));
+            using (var stream = assembly.GetManifestResourceStream(jsonName))
             {
-                await SendCommondRequest(cancellationToken);
-                await SendSsmlRequest(text, option, cancellationToken);
-
-                var state = SessionState.NotStarted;
-                while (_clientWebSocket.State == WebSocketState.Open)
+                using (var reader = new StreamReader(stream))
                 {
-                    var (dataBytes, msg) = await ReceiveMessage(cancellationToken);
+                    var json = await reader.ReadToEndAsync();
+                    return JsonSerializer.Deserialize<List<TTSVoice>>(json);
+                }
+            }
+        }
 
-                    if (msg.MessageType == WebSocketMessageType.Text)
+        public async Task Save(string content, string path, CancellationToken cancellationToken = default)
+        {
+            using (var ms = new MemoryStream())
+            {
+                await TTS(content, (metaObj) =>
+                {
+                    if (metaObj.Type == TTSMetadataType.Audio)
                     {
-                        var message = Encoding.UTF8.GetString(dataBytes);
-                        var (parameters, data) = GetHeadersAndData(message);
-                        parameters.TryGetValue("Path", out var path);
-                        switch (state)
-                        {
-                            case SessionState.NotStarted:
-                                {
-                                    if (path == "turn.start")
-                                    {
-                                        state = SessionState.TurnStarted;
-                                    }
-                                }
-                                break;
-                            case SessionState.TurnStarted:
-                                {
-                                    if (path == "turn.end")
-                                    {
-                                        throw new IOException("Unexpected turn.end");
-                                    }
-                                    else if (path == "turn.start")
-                                    {
-                                        throw new IOException("Turn already started");
-                                    }
-                                }
-                                break;
-                            case SessionState.Streaming:
-                                {
-                                    if (path == "audio.metadata")
-                                    {
-                                        var audioMetadata = JsonSerializer.Deserialize<MetadataModel>(data);
-                                        if (audioMetadata == null)
-                                            continue;
-
-                                        foreach (var metadata in audioMetadata.Metadata)
-                                        {
-                                            var metaType = metadata.Type;
-                                            if (idx != prevIdx)
-                                            {
-                                                var sum = 0;
-                                                for (var i = 0; i < idx; i++)
-                                                    sum += finalUtterance[i];
-                                                shiftTime = sum;
-                                                prevIdx = idx;
-                                            }
-
-                                            if (metaType == "WordBoundary")
-                                            {
-                                                finalUtterance[idx] = metadata.Data.Offset + metadata.Data.Duration + 8_750_000;
-
-                                                var metaObj = new TTSMetadata
-                                                {
-                                                    MetaType = metaType,
-                                                    Offset = metadata.Data.Offset + shiftTime,
-                                                    Duration = metadata.Data.Duration,
-                                                    Text = metadata.Data.text.Text,
-                                                };
-
-                                                if (OnMetadata != null)
-                                                    OnMetadata(metaObj);
-
-                                                metaResult.Add(metaObj);
-                                            }
-                                            else if (metaType == "SentenceBoundary")//need calculate finalUtterance for sentence?
-                                            {
-                                                var metaObj = new TTSMetadata
-                                                {
-                                                    MetaType = metaType,
-                                                    Offset = metadata.Data.Offset + shiftTime,
-                                                    Duration = metadata.Data.Duration,
-                                                    Text = metadata.Data.text.Text,
-                                                };
-
-                                                if (OnMetadata != null)
-                                                    OnMetadata(metaObj);
-
-                                                metaResult.Add(metaObj);
-                                            }
-                                            else if (metaType == "SessionEnd")
-                                            {
-                                                continue;
-                                            }
-                                            else
-                                            {
-                                                throw new Exception($"Unknown metadata type: {metaType}");
-                                            }
-                                        }
-                                    }
-                                    else if (path == "turn.end")
-                                    {
-                                        return new TTSResult
-                                        {
-                                            Metadata = metaResult,
-                                            Stream = streamResult.ToArray()
-                                        };
-                                    }
-                                    else if (path == "response")
-                                    {
-                                        continue;
-                                    }
-                                    else
-                                    {
-                                        throw new IOException($"Unexpected message during streaming: {message}");
-                                    }
-                                }
-                                break;
-                            default: break;
-                        }
+                        ms.Write(metaObj.Data, 0, metaObj.Data.Length);
                     }
-                    else if (msg.MessageType == WebSocketMessageType.Binary)
+                }, cancellationToken);
+
+                File.WriteAllBytes(path, ms.ToArray());
+            }
+        }
+
+        public async Task TTS(string content, Action<TTSMetadata> onMetadata, CancellationToken cancellationToken = default)
+        {
+            using (var webSocket = await EnsureConnection(cancellationToken))
+            {
+                var texts = SplitTextByByteLength(Escape(RemoveIncompatibleCharacters(content)), CalcMaxMsgSize(_option));
+                var offset_compensation = 0.0;
+                foreach (var text in texts)
+                {
+                    await SendCommondRequest(webSocket, cancellationToken);
+                    await SendSsmlRequest(webSocket, text, _option, cancellationToken);
+
+                    var last_duration_offset = 0.0;
+                    while (webSocket.State == WebSocketState.Open)
                     {
-                        if (state == SessionState.NotStarted)
+                        var (dataBytes, received) = await ReceiveMessage(webSocket, cancellationToken);
+                        if (received.MessageType == WebSocketMessageType.Text)
                         {
-                            throw new IOException($"Unexpected Binary");
-                        }
-                        if (dataBytes.Length < 2)
-                        {
-                            throw new IOException("Message too short");
-                        }
+                            var msg = Encoding.UTF8.GetString(dataBytes);
+                            var (parameters, data) = GetHeadersAndData(msg);
+                            if (!parameters.TryGetValue("Path", out var path))
+                                continue;
 
-                        var headerLength = (dataBytes[0] << 8) | (dataBytes[1]);
-                        if (headerLength + 2 > dataBytes.Length)
-                        {
-                            throw new IOException("Message too short");
-                        }
+                            if (path == "audio.metadata")
+                            {
+                                foreach (var metadata in ParseMetadata(data, offset_compensation))
+                                {
+                                    onMetadata?.Invoke(metadata);
 
-                        state = SessionState.Streaming;
-                        using (var audioStream = new MemoryStream(dataBytes, headerLength + 2, dataBytes.Length - headerLength - 2))
-                        {
-                            if (OnStream != null)
-                                OnStream(new TTSStream { PartialStream = audioStream.ToArray() });
-
-                            await audioStream.CopyToAsync(streamResult);
+                                    if (metadata.Type == TTSMetadataType.WordBoundary)
+                                        last_duration_offset = metadata.Offset + metadata.Duration;
+                                }
+                            }
+                            else if (path == "turn.end")
+                            {
+                                offset_compensation = last_duration_offset;
+                                offset_compensation += 8_750_000;
+                                break;
+                            }
+                            else if (path == "response" || path == "turn.start")
+                            {
+                                continue;
+                            }
+                            else
+                            {
+                                throw new IOException($"Unexpected message during  {msg}");
+                            }
                         }
-                    }
-                    else if (msg.MessageType == WebSocketMessageType.Close)
-                    {
-                        throw new IOException("Unexpected closing of connection");
+                        else if (received.MessageType == WebSocketMessageType.Binary)
+                        {
+                            foreach (var audio in ParseAudioBytes(dataBytes))
+                            {
+                                onMetadata?.Invoke(audio);
+                            }
+                        }
+                        else if (received.MessageType == WebSocketMessageType.Close)
+                        {
+                            throw new IOException("Unexpected closing of connection");
+                        }
                     }
                 }
             }
-
-            return null;
         }
 
-        private async Task<(byte[], WebSocketReceiveResult)> ReceiveMessage(CancellationToken cancellationToken)
+        private async Task<(byte[], WebSocketReceiveResult)> ReceiveMessage(ClientWebSocket clientWebSocket, CancellationToken cancellationToken)
         {
             using (var data = new MemoryStream())
             {
@@ -213,7 +129,7 @@ namespace edge_tts_net
                 while (true)
                 {
                     var buffer = new byte[5 * 1024];
-                    received = await _clientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                    received = await clientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
                     data.Write(buffer, 0, received.Count);
                     if (received.Count == 0 || received.EndOfMessage)
                         break;
@@ -223,7 +139,72 @@ namespace edge_tts_net
             }
         }
 
-        private async Task SendCommondRequest(CancellationToken cancellationToken)
+        private IEnumerable<TTSMetadata> ParseMetadata(string msg, double offset_compensation)
+        {
+            var audioMetadata = JsonSerializer.Deserialize<MetadataModel>(msg);
+            if (audioMetadata != null)
+            {
+                foreach (var metadata in audioMetadata.Metadata)
+                {
+                    var metaType = metadata.Type;
+                    if (metaType == "WordBoundary")
+                    {
+                        yield return new TTSMetadata
+                        {
+                            Type = TTSMetadataType.WordBoundary,
+                            Offset = metadata.Data.Offset + offset_compensation,
+                            Duration = metadata.Data.Duration,
+                            Text = metadata.Data.text.Text,
+                        };
+                    }
+                    else if(metaType == "SentenceBoundary")
+                    {
+                        yield return new TTSMetadata
+                        {
+                            Type = TTSMetadataType.SentenceBoundary,
+                            Offset = metadata.Data.Offset + offset_compensation,
+                            Duration = metadata.Data.Duration,
+                            Text = metadata.Data.text.Text,
+                        };
+                    }
+                    else if(metaType == "SessionEnd")
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        throw new Exception($"Unknown metadata type: {metaType}");
+                    }
+                }
+            }
+        }
+
+        private IEnumerable<TTSMetadata> ParseAudioBytes(byte[] dataBytes)
+        {
+            if (dataBytes.Length < 2)
+            {
+                throw new IOException("Message too short");
+            }
+
+            var headerLength = (dataBytes[0] << 8) | (dataBytes[1]);
+            if (headerLength + 2 > dataBytes.Length)
+            {
+                throw new IOException("Message too short");
+            }
+
+            using (var audioStream = new MemoryStream(dataBytes, headerLength + 2, dataBytes.Length - headerLength - 2))
+            {
+                var metaObj = new TTSMetadata
+                {
+                    Type = TTSMetadataType.Audio,
+                    Data = audioStream.ToArray(),
+                };
+
+                yield return metaObj;
+            }
+        }
+
+        private async Task SendCommondRequest(ClientWebSocket clientWebSocket, CancellationToken cancellationToken)
         {
             var request = $"X-Timestamp:{DateToString()}\r\n" +
                         "Content-Type:application/json; charset=utf-8\r\n" +
@@ -233,62 +214,59 @@ namespace edge_tts_net
                         @"""outputFormat"":""audio-24khz-48kbitrate-mono-mp3""" +
                         "}}}}\r\n";
 
-            await _clientWebSocket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(request)), WebSocketMessageType.Text, true, cancellationToken);
+            await clientWebSocket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(request)), WebSocketMessageType.Text, true, cancellationToken);
         }
 
-        private async Task SendSsmlRequest(string text, TTSOption option, CancellationToken cancellationToken)
+        private async Task SendSsmlRequest(ClientWebSocket clientWebSocket, string text, TTSOption option, CancellationToken cancellationToken)
         {
             var request = SsmlHeadersPlusData(ConnectId(), DateToString(), Mkssml(text, option));
 
-            await _clientWebSocket?.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(request)), WebSocketMessageType.Text, true, cancellationToken);
+            await clientWebSocket?.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(request)), WebSocketMessageType.Text, true, cancellationToken);
         }
 
-        private async Task EnsureConnection(CancellationToken cancellationToken)
+        private async Task<ClientWebSocket> EnsureConnection(CancellationToken cancellationToken)
         {
-            while (_clientWebSocket == null || _clientWebSocket.State != WebSocketState.Open)
+            var clientWebSocket = new ClientWebSocket();
+
+            var options = clientWebSocket.Options;
+
+            foreach (var wssheader in Constants.WSS_HEADERS)
             {
-                _clientWebSocket?.Dispose();
-                _clientWebSocket = new ClientWebSocket();
-                var options = _clientWebSocket.Options;
-
-                foreach (var wssheader in Constants.WSS_HEADERS)
-                {
-                    options.SetRequestHeader(wssheader.Key, wssheader.Value);
-                }
-
-                if (!string.IsNullOrEmpty(_webProxy))
-                    options.Proxy = new WebProxy(_webProxy);
-
-                var wssUrl = Constants.WSS_URL + "&Sec-MS-GEC=" + DRM.Generate_Sec_ms_gec() + "&Sec-MS-GEC-Version=" + Constants.SEC_MS_GEC_VERSION + "&ConnectionId=" + ConnectId();
-                await _clientWebSocket.ConnectAsync(new Uri(wssUrl), cancellationToken);
-                break;
-
-                //var _httpClient = new HttpClient();
-                //var request = new HttpRequestMessage(HttpMethod.Get, wssUrl);
-                //request.Headers.Add("Connection", "Upgrade");
-                //request.Headers.Add("Upgrade", "websocket");
-                //request.Headers.Add("Sec-WebSocket-Version", "13");
-                //request.Headers.Add("Sec-WebSocket-Key", Convert.ToBase64String(Guid.NewGuid().ToByteArray()));
-                //var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-
-                //if (response.StatusCode == HttpStatusCode.SwitchingProtocols)
-                //{
-                //    try
-                //    {
-                        
-                //    }
-                //    catch (WebSocketException ex)
-                //    {
-                //        Console.WriteLine(ex);
-                //    }
-                //}
-                //else
-                //{
-                //    response.Headers.TryGetValues("Date", out var date);
-                //    DRM.HandleClientResponse401Error(date.First());
-                //    Console.WriteLine(  );
-                //}
+                options.SetRequestHeader(wssheader.Key, wssheader.Value);
             }
+
+            if (!string.IsNullOrEmpty(_webProxy))
+                options.Proxy = new WebProxy(_webProxy);
+
+            var wssUrl = Constants.WSS_URL + "&Sec-MS-GEC=" + DRM.Generate_Sec_ms_gec() + "&Sec-MS-GEC-Version=" + Constants.SEC_MS_GEC_VERSION + "&ConnectionId=" + ConnectId();
+            await clientWebSocket.ConnectAsync(new Uri(wssUrl), cancellationToken);
+            return clientWebSocket;
+
+            //var _httpClient = new HttpClient();
+            //var request = new HttpRequestMessage(HttpMethod.Get, wssUrl);
+            //request.Headers.Add("Connection", "Upgrade");
+            //request.Headers.Add("Upgrade", "websocket");
+            //request.Headers.Add("Sec-WebSocket-Version", "13");
+            //request.Headers.Add("Sec-WebSocket-Key", Convert.ToBase64String(Guid.NewGuid().ToByteArray()));
+            //var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+            //if (response.StatusCode == HttpStatusCode.SwitchingProtocols)
+            //{
+            //    try
+            //    {
+
+            //    }
+            //    catch (WebSocketException ex)
+            //    {
+            //        Console.WriteLine(ex);
+            //    }
+            //}
+            //else
+            //{
+            //    response.Headers.TryGetValues("Date", out var date);
+            //    DRM.HandleClientResponse401Error(date.First());
+            //    Console.WriteLine(  );
+            //}
         }
 
         private (Dictionary<string, string>, string) GetHeadersAndData(string data)

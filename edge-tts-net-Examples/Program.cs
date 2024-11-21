@@ -1,30 +1,40 @@
 ﻿using edge_tts_net;
 
-namespace edge_tts_net_Examples
+const string proxy = "";
+
+static async Task GetVoices()
 {
-    internal class Program
-    {
-        static void Main(string[] args)
-        {
-            BasicTest();
-        }
-
-        static void BasicTest()
-        {
-            EdgeTTSNet edgeTTSNet = new EdgeTTSNet("http://54.255.235.102:808");
-            var r = edgeTTSNet.TTS(@"Hello,
-in my .NET WindowsForm application written with C #, I automate the insertion of some forms.
-
-Through javascript I can do everything except choosing the file for upload.
-
-Is there a solution to choose the file of an input tag: file or since I can open the file selection dialog, how can I control that window?
-
-please i need help
-
-thanks I am grateful").Result;
-
-            Console.WriteLine(  r.Metadata);
-            File.WriteAllBytes("hw.mp3", r.Stream);
-        }
-    }
+    var edgetts = new EdgeTTSNet();
+    var voices = await edgetts.GetVoices();
+    Console.WriteLine(voices.Count);
 }
+
+static async Task BasicSave()
+{
+    var edgeTts = new EdgeTTSNet(webProxy: proxy);
+    await edgeTts.Save(@"Hello, World!", "basic.mp3");
+}
+
+static async Task BasicStream()
+{
+    var fs = new FileStream("basic_stream.mp3", FileMode.Create);
+
+    var edgetts = new EdgeTTSNet(webProxy: proxy);
+    await edgetts.TTS(@"Hello, World!", (metaObj) =>
+    {
+        if (metaObj.Type == TTSMetadataType.Audio)
+        {
+            fs.Write(metaObj.Data);
+        }
+    });
+
+    fs.Flush();
+    fs.Dispose();
+}
+
+
+await GetVoices();
+
+await BasicSave();
+
+await BasicStream();
