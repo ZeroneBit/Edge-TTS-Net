@@ -3,6 +3,18 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>edge_tts_net</RootNamespace>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Go to github repository to find examples.</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/ZeroneBit/Edge-TTS-Net</RepositoryUrl>
+    <PackageTags>tts; text-to-speech; edge-tts</PackageTags>
+    <Description>edge-tts-net is an .Net module that allows you to use Microsoft Edge's online text-to-speech service without needing Microsoft Edge or Windows or an API key. It is inspired by the Python module edge-tts, and it is actually an .Net version of that.</Description>
+    <AssemblyVersion></AssemblyVersion>
+    <FileVersion></FileVersion>
+    <Version>$(VersionPrefix)1.0.1</Version>
+    <Authors>ZeroneBit</Authors>
+    <Company>ZeroneBit</Company>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,7 +26,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
