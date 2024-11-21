@@ -10,13 +10,10 @@ namespace edge_tts_net.Internal
     {
         public static string Generate_Sec_ms_gec()
         {
-            var ticks = GetUnixTimestamp();
-            ticks += WIN_EPOCH;
-            ticks -= ticks % 300;
-            ticks *= S_TO_NS / 100;
+            long ticks = DateTime.Now.ToFileTimeUtc();
+            ticks -= ticks % 3_000_000_000;
 
-            var str = ticks.ToString() + Constants.TRUSTED_CLIENT_TOKEN;
-
+            var str = ticks + Constants.TRUSTED_CLIENT_TOKEN;
             var sha256 = SHA256.Create();
             var result = BytesToHexString(sha256.ComputeHash(Encoding.ASCII.GetBytes(str)));
             return result;
@@ -24,17 +21,7 @@ namespace edge_tts_net.Internal
 
         private static string BytesToHexString(byte[] bytes)
         {
-            if (bytes == null || bytes.Length == 0)
-            {
-                return string.Empty;
-            }
-
-            var hex = new StringBuilder(bytes.Length * 2);
-            foreach (byte b in bytes)
-            {
-                hex.AppendFormat("{0:x2}", b);
-            }
-            return hex.ToString();
+            return BitConverter.ToString(bytes).Replace("-", "").ToUpper();
         }
 
         public static void HandleClientResponse401Error(string date)
