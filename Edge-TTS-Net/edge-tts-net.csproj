@@ -6,13 +6,13 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Fix 403 errors</PackageReleaseNotes>
+    <PackageReleaseNotes>Fix 4xx errors</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/ZeroneBit/Edge-TTS-Net</RepositoryUrl>
     <PackageTags>tts; text-to-speech; edge-tts</PackageTags>
     <Description>edge-tts-net is an .Net module that allows you to use Microsoft Edge's online text-to-speech service without needing Microsoft Edge or Windows or an API key. It is inspired by the Python module edge-tts, and it is actually an .Net version of that.</Description>
     <AssemblyVersion></AssemblyVersion>
     <FileVersion></FileVersion>
-    <Version>$(VersionPrefix)1.0.2</Version>
+    <Version>$(VersionPrefix)2.0.0</Version>
     <Authors>ZeroneBit</Authors>
     <Company>ZeroneBit</Company>
   </PropertyGroup>
