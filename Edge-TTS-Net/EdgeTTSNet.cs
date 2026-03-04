@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Text;
@@ -16,33 +17,42 @@ namespace edge_tts_net
 {
     public class EdgeTTSNet
     {
-        private TTSOption _option;
+        private HttpClient _httpClient;
         private string _webProxy;
 
-        public EdgeTTSNet(TTSOption option = default, string webProxy = null)
+        public EdgeTTSNet(string webProxy = null)
         {
             _webProxy = webProxy;
-            _option = option;
-            if (_option == default)
-                _option = TTSOption.Default;
         }
 
         public async Task<List<TTSVoice>> GetVoices()
         {
-            var assembly = Assembly.GetExecutingAssembly();
-            var jsonName = assembly.GetManifestResourceNames().FirstOrDefault(n => n.Contains("Voices.json"));
-            using (var stream = assembly.GetManifestResourceStream(jsonName))
+            if(_httpClient == null)
+                _httpClient = new HttpClient();
+
+            var muid = DRM.GenerateMUID();
+            Constants.VOICE_HEADERS["Cookie"] = $"muid={muid}";
+            foreach (var voiceheader in Constants.VOICE_HEADERS)
             {
-                using (var reader = new StreamReader(stream))
-                {
-                    var json = await reader.ReadToEndAsync();
-                    return JsonSerializer.Deserialize<List<TTSVoice>>(json);
-                }
+                _httpClient.DefaultRequestHeaders.Add(voiceheader.Key, voiceheader.Value);
             }
+
+            if (!string.IsNullOrEmpty(_webProxy))
+            {//_httpClient.web
+            }
+
+            var voiceUrl = Constants.VOICE_LIST + $"&Sec-MS-GEC={DRM.Generate_Sec_ms_gec()}" + $"&Sec-MS-GEC-Version={Constants.SEC_MS_GEC_VERSION}";
+            var resultJson = await _httpClient.GetStringAsync(voiceUrl);
+            var voices = JsonSerializer.Deserialize<List<TTSVoice>>(resultJson);
+            return voices;
         }
 
-        public async Task Save(string content, string path, CancellationToken cancellationToken = default)
+        public async Task Save(string content, string path, TTSOption option = default, CancellationToken cancellationToken = default)
         {
+            if (option == default)
+            {
+                option = TTSOption.Default;
+            }
             using (var ms = new MemoryStream())
             {
                 await TTS(content, (metaObj) =>
@@ -51,22 +61,26 @@ namespace edge_tts_net
                     {
                         ms.Write(metaObj.Data, 0, metaObj.Data.Length);
                     }
-                }, cancellationToken);
+                }, option, cancellationToken);
 
                 File.WriteAllBytes(path, ms.ToArray());
             }
         }
 
-        public async Task TTS(string content, Action<TTSMetadata> onMetadata, CancellationToken cancellationToken = default)
+        public async Task TTS(string content, Action<TTSMetadata> onMetadata, TTSOption option = default, CancellationToken cancellationToken = default)
         {
+            if (option == default)
+            {
+                option = TTSOption.Default;
+            }
             using (var webSocket = await EnsureConnection(cancellationToken))
             {
-                var texts = SplitTextByByteLength(Escape(RemoveIncompatibleCharacters(content)), CalcMaxMsgSize(_option));
+                var texts = SplitTextByByteLength(Escape(RemoveIncompatibleCharacters(content)), CalcMaxMsgSize(option));
                 var offset_compensation = 0.0;
                 foreach (var text in texts)
                 {
                     await SendCommondRequest(webSocket, cancellationToken);
-                    await SendSsmlRequest(webSocket, text, _option, cancellationToken);
+                    await SendSsmlRequest(webSocket, text, option, cancellationToken);
 
                     var last_duration_offset = 0.0;
                     while (webSocket.State == WebSocketState.Open)
@@ -228,17 +242,22 @@ namespace edge_tts_net
         {
             var clientWebSocket = new ClientWebSocket();
 
+            var muid = DRM.GenerateMUID();
+            Constants.WSS_HEADERS["Cookie"] = $"muid={muid}";
             var options = clientWebSocket.Options;
-
             foreach (var wssheader in Constants.WSS_HEADERS)
             {
                 options.SetRequestHeader(wssheader.Key, wssheader.Value);
             }
+            //var cookies = options.Cookies ?? new CookieContainer();
+            //cookies.Add(new Cookie("muid", muid));
+            //options.Cookies = cookies;
 
             if (!string.IsNullOrEmpty(_webProxy))
                 options.Proxy = new WebProxy(_webProxy);
 
-            var wssUrl = Constants.WSS_URL + "&Sec-MS-GEC=" + DRM.Generate_Sec_ms_gec() + "&Sec-MS-GEC-Version=" + Constants.SEC_MS_GEC_VERSION + "&ConnectionId=" + ConnectId();
+            //var wssUrl = Constants.WSS_URL + "&Sec-MS-GEC=" + DRM.Generate_Sec_ms_gec() + "&Sec-MS-GEC-Version=" + Constants.SEC_MS_GEC_VERSION + "&ConnectionId=" + ConnectId();
+            var wssUrl = Constants.WSS_URL + $"&ConnectionId={ConnectId()}" + $"&Sec-MS-GEC={DRM.Generate_Sec_ms_gec()}" + $"&Sec-MS-GEC-Version={Constants.SEC_MS_GEC_VERSION}";
             await clientWebSocket.ConnectAsync(new Uri(wssUrl), cancellationToken);
             return clientWebSocket;
 
@@ -372,7 +391,7 @@ namespace edge_tts_net
 
         private string ConnectId()
         {
-            return Guid.NewGuid().ToString("N");
+            return Guid.NewGuid().ToString("N").ToLower();
         }
 
         private string Escape(string data)

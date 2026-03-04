@@ -30,21 +30,20 @@ static async Task BasicStream()
     fs.Dispose();
 }
 
-static async Task SetOptions()
+static async Task BasicOptions()
 {
     var edgetts = new EdgeTTSNet();
 
     var voices = await edgetts.GetVoices();
-    var cnVoice = voices.FirstOrDefault(v => v.Locale == "zh-CN");
-    var options = new TTSOption
+    var option = new TTSOption
     (
-        voice: cnVoice.Name,
+        voice: voices[0].ShortName,
         pitch: "+0Hz",
         rate: "+25%",
         volume: "+0%"
     );
-
-    await edgetts.Save("Hello, World", "basic_option.mp3");
+    
+    await edgetts.Save("Hello, World!", "basic_option.mp3", option);
 }
 
 
@@ -54,4 +53,4 @@ await BasicSave();
 
 await BasicStream();
 
-await SetOptions();
+await BasicOptions();

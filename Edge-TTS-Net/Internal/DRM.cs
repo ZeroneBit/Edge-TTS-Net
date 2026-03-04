@@ -8,6 +8,21 @@ namespace edge_tts_net.Internal
 {
     internal class DRM
     {
+        public static string GenerateMUID()
+        {
+            byte[] randomBytes = new byte[16];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(randomBytes);
+            }
+            return BitConverter.ToString(randomBytes).Replace("-", "").ToUpper();
+        }
+
+        //public static void HeadersWithMUID(Dictionary<string, string> headers)
+        //{
+        //    headers["Cookie"] = $"muid={GenerateMUID()}";
+        //}
+
         public static string Generate_Sec_ms_gec()
         {
             long ticks = DateTime.Now.ToFileTimeUtc();
